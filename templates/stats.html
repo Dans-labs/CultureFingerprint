@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statistics over the portuguese data sets</title>
+<link rel="stylesheet"
+	href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+<link rel="stylesheet"
+	href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
+<script
+	src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<script
+	src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+<script
+	src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/1.0.2/Chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
+<style>
+canvas {
+	width: 100% !important;
+	max-width: 1200px;
+	height: auto !important;
+}
+
+body {
+	counter-reset: h2counter;
+}
+
+h1 {
+	counter-reset: h2counter;
+}
+
+h2:before {
+	content: counter(h2counter) "\0000a0\0000a0";
+	counter-increment: h2counter;
+	counter-reset: h3counter;
+}
+
+h3:before {
+	content: counter(h2counter) "." counter(h3counter) "\0000a0\0000a0";
+	counter-increment: h3counter;
+}
+
+.bar-legend {
+	list-style-type: none;
+	margin-top: 5px;
+	text-align: center;
+	-webkit-padding-start: 0;
+	-moz-padding-start: 0;
+	padding-left: 0;
+}
+
+li {
+	display: inline-block;
+	white-space: nowrap;
+	position: relative;
+	margin-bottom: 4px;
+	border-radius: 5px;
+	padding: 2px 8px 2px 28px;
+	Font-size: smaller;
+	cursor: default;
+}
+
+span {
+	display: block;
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 20px;
+	height: 20px;
+	border-radius: 5px;
+}
+
+.chord path {
+	fill-opacity: .67;
+	stroke: #000;
+	stroke-width: .5px;
+}
+
+.svg-container {
+	display: inline-block;
+	position: relative;
+	width: 100%;
+	padding-bottom: 100%;
+	/* aspect ratio */
+	vertical-align: top;
+	overflow: hidden;
+}
+
+.svg-content-responsive {
+	display: inline-block;
+	position: absolute;
+	top: 10px;
+	left: 0;
+}
+</style>
+<script>
+var colorbrewer = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999"];
+
+// Returns an event handler for fading a given chord group.
+function fade(svg, opacity) {
+    return function(g, i) {
+        svg.selectAll(".chord path")
+            .filter(function(d) {
+                return d.source.index != i && d.target.index != i;
+            })
+            .transition()
+            .style("opacity", opacity);
+    };
+}
+
+// Draw a chord diagram
+function drawChord(csv, divname) {
+    d3.csv(csv, function(error, rows) {
+        // Format the column 'count' as number
+        rows.forEach(function(d) {
+            d.count = +d.count;
+        });
+
+        // Iterate over all the rows to populate the headers
+        var headers = []
+        rows.forEach(function(entry) {
+            // Find or insert the 'to' and from' in the headers
+            if (headers.indexOf(entry.from) == -1) headers.push(entry.from);
+            if (headers.indexOf(entry.to) == -1) headers.push(entry.to);
+        });
+
+        // Create the matrix
+        var matrix = []
+        for (var i = 0; i < headers.length; i++) {
+            row = [];
+            for (var j = 0; j < headers.length; j++) row.push(0);
+            matrix.push(row);
+        }
+
+        // Iterate over all the rows again to populate the matrix
+        rows.forEach(function(entry) {
+            // Find the 'from' and 'to' in the headers
+            index_from = headers.indexOf(entry.from)
+            index_to = headers.indexOf(entry.to)
+
+            // Record the value
+            matrix[index_from][index_to] = entry.count
+        });
+
+        var chord = d3.layout.chord()
+            .padding(.05)
+            .sortSubgroups(d3.descending)
+            .matrix(matrix);
+
+        var width = 600 - 10 * 2,
+            height = 400 - 10 * 2,
+            innerRadius = Math.min(width, height) * .41,
+            outerRadius = innerRadius * 1.1;
+
+        var fill = d3.scale.ordinal()
+            .domain(d3.range(headers.length))
+            .range(colorbrewer.slice(0, headers.length));
+
+        var svg = d3.select("div#" + divname)
+            .append("div")
+            .classed("svg-container", true)
+            .append("svg")
+            .attr("preserveAspectRatio", "xMinYMin meet")
+            .attr("viewBox", "0 0 600 400")
+            .classed("svg-content-responsive", true)
+            .append("g")
+            .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+
+        svg.append("g").selectAll("path")
+            .data(chord.groups)
+            .enter().append("path")
+            .style("fill", function(d) {
+                return fill(d.index);
+            })
+            .style("stroke", function(d) {
+                return fill(d.index);
+            })
+            .attr("d", d3.svg.arc().innerRadius(innerRadius).outerRadius(outerRadius))
+            .on("mouseover", fade(svg, .1))
+            .on("mouseout", fade(svg, 1));
+
+        svg.append("g")
+            .attr("class", "chord")
+            .selectAll("path")
+            .data(chord.chords)
+            .enter().append("path")
+            .attr("d", d3.svg.chord().radius(innerRadius))
+            .style("fill", function(d) {
+                return fill(d.target.index);
+            })
+            .style("opacity", 1);
+
+        var labels = svg.append("g").selectAll("g")
+            .data(chord.groups)
+            .enter().append("g").selectAll("g")
+            .data(function(d) {
+                return [{
+                    angle: (d.startAngle + d.endAngle) / 2,
+                    label: headers[d.index]
+                }];
+            })
+            .enter().append("g")
+            .attr("transform", function(d) {
+                return "rotate(" + (d.angle * 180 / Math.PI - 90) + ")" + "translate(" + (outerRadius + 20) + ",0)";
+            });
+
+        labels.append("text")
+            .attr("x", 1)
+            .attr("dy", ".35em")
+            .attr("transform", function(d) {
+                return d.angle > Math.PI ? "rotate(180)translate(-16)" : null;
+            })
+            .style("fill", "#000")
+            .style("font-size", 20)
+            .style("text-anchor", function(d) {
+                return d.angle > Math.PI ? "end" : null;
+            })
+            .text(function(d) {
+                return d.label;
+            });
+    });
+}
+</script>
+</head>
+<body>
+	<div class="container">
+		<div class="page-header">
+			<h1>Statistics over the portuguese data sets</h1>
+		</div>
+		<div class="row">
+			<div class="col-md-12">
+				<h2>Overview</h2>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-6">
+				<h4>Grouped distribution of publication years</h4>
+				<canvas id="pub_years_overview" width="300" height="200"></canvas>
+				<div id="pub_years_overview_legend"></div>
+				<script>
+					var data = {
+						labels : {{overview_years.labels}},
+						datasets : {{overview_years.datasets}}
+					};
+					var ctx = document.getElementById("pub_years_overview")
+							.getContext("2d");
+					var chart = new Chart(ctx).Bar(data, {
+						barShowStroke : true
+					});
+					document.getElementById("pub_years_overview_legend").innerHTML = chart.generateLegend();
+				</script>
+			</div>
+			<div class="col-md-6">
+				<h4>Distribution of UDC classes</h4>
+				<canvas id="udc_overview" width="300" height="200"></canvas>
+				<div id="udc_overview_legend"></div>
+				<script>
+					var data = {
+						labels : {{overview_udc.labels}},
+						datasets : {{overview_udc.datasets}}
+					};
+					var ctx = document.getElementById("udc_overview")
+							.getContext("2d");
+					var chart = new Chart(ctx).Radar(data, {
+						barShowStroke : true
+					});
+					document.getElementById("udc_overview_legend").innerHTML = chart.generateLegend();
+				</script>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-12">
+				<h2>Breakdown per collection</h2>
+			</div>
+		</div>
+		{% for dataset in datasets|sort %}
+		<div class="row">
+			<div class="col-md-12">
+				<h3>Collection "{{ dataset }}"</h3>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-12">
+				<h4>General statistics</h4>
+				<table class="table table-condensed table-hover">
+					<thead>
+						<tr>
+							<th>Description</th>
+							<th>Value</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td>Number of records with a unique identifier, a
+								publication date and at least one UDC class</td>
+							<td>{{ datasets[dataset].nb_records }}</td>
+						</tr>
+						<tr>
+							<td>Number of records with an exact publication date in the
+								form XXXX</td>
+							<td>{{ datasets[dataset].nb_recs_exact_date }}</td>
+						</tr>
+						<tr>
+							<td>Number of records with more than one UDC class</td>
+							<td>{{ datasets[dataset].nb_recs_several_udc }}</td>
+						</tr>
+						<tr>
+							<td>Number of distinct publication years used</td>
+							<td>{{datasets[dataset].per_date_pairs.size}}</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-6">
+				<h4>Grouped distribution of publication years</h4>
+				<canvas id="pub_years_{{dataset}}" width="300" height="200"></canvas>
+				<script>
+					var data = {
+						labels : {{datasets[dataset].per_date_bin_pairs.labels}},
+						datasets : [ {
+							label : "{{ dataset }}",
+							fillColor : "rgba(151,187,205,0.5)",
+							strokeColor : "rgba(151,187,205,0.8)",
+							highlightFill : "rgba(151,187,205,0.75)",
+							highlightStroke : "rgba(151,187,205,1)",
+							data : {{datasets[dataset].per_date_bin_pairs.vals}}
+						} ]
+					};
+					var ctx = document.getElementById("pub_years_{{dataset}}")
+							.getContext("2d");
+					new Chart(ctx).Bar(data, {
+						barShowStroke : true
+					});
+				</script>
+			</div>
+			<div class="col-md-6">
+				<h4>Distribution of UDC classes</h4>
+				<canvas id="udc_{{dataset}}" width="300" height="200"></canvas>
+				<script>
+					var data = {
+						labels : {{datasets[dataset].per_udc_pairs.labels}},
+						datasets : [ {
+							label : "{{ dataset }}",
+							fillColor : "rgba(151,187,205,0.5)",
+							strokeColor : "rgba(151,187,205,0.8)",
+							highlightFill : "rgba(151,187,205,0.75)",
+							highlightStroke : "rgba(151,187,205,1)",
+							data : {{datasets[dataset].per_udc_pairs.vals}}
+						} ]
+					};
+					var ctx = document.getElementById("udc_{{dataset}}")
+							.getContext("2d");
+					new Chart(ctx).Radar(data, {
+						barShowStroke : true
+					});
+				</script>
+			</div>
+			<div class="row">
+				<div class="col-md-4">
+					<h4>Chord for operator +</h4>
+					<div id="chord_{{dataset}}_plus"></div>
+					<script>drawChord('network_{{dataset}}_plus.csv', 'chord_{{dataset}}_plus');</script>
+				</div>
+				<div class="col-md-4">
+					<h4>Chord for operator :</h4>
+					<div id="chord_{{dataset}}_colon"></div>
+					<script>drawChord('network_{{dataset}}_colon.csv', 'chord_{{dataset}}_colon');</script>
+				</div>
+				<div class="col-md-4">
+					<h4>Chord for operator /</h4>
+					<div id="chord_{{dataset}}_slash"></div>
+					<script>drawChord('network_{{dataset}}_slash.csv', 'chord_{{dataset}}_slash');</script>
+				</div>
+			</div>
+		</div>
+		{% endfor %}
+	</div>
+	<script>
+	</script>
+</body>
+</html>
